@@ -23,17 +23,15 @@ import {
   NativeSyntheticEvent,
   TextInputKeyPressEventData,
 } from 'react-native';
+import type { ViewStyle } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as Haptics from 'expo-haptics';
-import { Audio } from 'expo-av';
 import * as Network from 'expo-network';
-import { LinearGradient } from 'expo-linear-gradient';
 
 const WEBHOOK_URL = 'https://quincy-unsyllogistic-carl.ngrok-free.dev/webhook/30a199d8-33f4-4416-899e-e6f0bf253075';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
-const BEEP_SOUND_URL = 'https://actions.google.com/sounds/v1/alarms/beep_short.ogg';
 
 type Role = 'user' | 'bot' | 'system';
 
@@ -114,37 +112,9 @@ const getFilenameFromContentDisposition = (contentDisposition: string | null): s
 };
 
 const useReplyFeedback = () => {
-  const soundRef = useRef<Audio.Sound | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-    (async () => {
-      try {
-        const { sound } = await Audio.Sound.createAsync({ uri: BEEP_SOUND_URL });
-        if (isMounted) {
-          soundRef.current = sound;
-        } else {
-          await sound.unloadAsync();
-        }
-      } catch (error) {
-        console.warn('Failed to load sound', error);
-      }
-    })();
-
-    return () => {
-      isMounted = false;
-      if (soundRef.current) {
-        soundRef.current.unloadAsync();
-      }
-    };
-  }, []);
-
   return useCallback(async () => {
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Soft);
-      if (soundRef.current) {
-        await soundRef.current.replayAsync();
-      }
     } catch (error) {
       console.warn('Feedback failed', error);
     }
@@ -270,6 +240,23 @@ const AccountsAIApp: React.FC = () => {
   }, [colorScheme]);
 
   const isDarkMode = colorScheme === 'dark';
+  const gradientBackgroundStyle = useMemo<ViewStyle & { backgroundImage?: string }>(() => {
+    const [startColor, endColor] = themeStyles.backgroundGradient;
+    if (Platform.OS === 'web') {
+      return {
+        backgroundImage: `linear-gradient(180deg, ${startColor} 0%, ${endColor} 100%)`,
+        backgroundColor: endColor,
+      };
+    }
+    return { backgroundColor: endColor };
+  }, [themeStyles.backgroundGradient]);
+  const nativeGradientOverlayStyle = useMemo<ViewStyle | null>(() => {
+    if (Platform.OS === 'web') {
+      return null;
+    }
+    const [startColor] = themeStyles.backgroundGradient;
+    return { backgroundColor: startColor };
+  }, [themeStyles.backgroundGradient]);
   const connectionBadgeColor = isOnline === null ? '#e0e7ff' : isOnline ? '#dcfce7' : '#fee2e2';
   const connectionTextColor = isOnline === null ? '#312e81' : isOnline ? '#065f46' : '#991b1b';
   const connectionLabel =
@@ -550,7 +537,10 @@ const AccountsAIApp: React.FC = () => {
   const sendButtonLabel = isSending ? 'Sending…' : 'Send';
 
   return (
-    <LinearGradient colors={themeStyles.backgroundGradient} style={styles.root}>
+    <View style={[styles.root, gradientBackgroundStyle]}>
+      {nativeGradientOverlayStyle ? (
+        <View pointerEvents="none" style={[styles.nativeGradientOverlay, nativeGradientOverlayStyle]} />
+      ) : null}
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       <KeyboardAvoidingView
         style={styles.keyboardAvoiding}
@@ -647,13 +637,22 @@ const AccountsAIApp: React.FC = () => {
           </View>
         </View>
       </KeyboardAvoidingView>
-    </LinearGradient>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   root: {
     flex: 1,
+    position: 'relative',
+  },
+  nativeGradientOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: '65%',
+    opacity: 0.85,
   },
   keyboardAvoiding: {
     flex: 1,
